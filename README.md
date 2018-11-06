@@ -13,9 +13,11 @@ In order to use the bot you got to have the following prerequisites installed
 - Can display market prices for single cards and bcx
 - Can display all informations about a Steemmonster player
 - All informations about quests at your disposal
+- Monetary evaluation of all cards of one player
+- Display current Leaderboard
 
 ## Things to come:
-- Monetary evaluation of all cards of one player
 - Display Battle History of one player 
 - Show 1 vs 1 Statistics
-- Display current Leaderboard
+- Show low hanging leveling opportunities
+- Assist in calculating sell value of single player cards
