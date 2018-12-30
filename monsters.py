@@ -7,21 +7,42 @@ Created on Tue Oct 30 13:04:42 2018
 """
 import sqlite3
 #import sys
-#from datetime import datetime, timedelta, date
+import datetime
 import time
 #import json
+import locale
 import requests
 #from timeit import default_timer as timer
 #import asyncio
+from beem.blockchain import Blockchain
+from pytz import timezone
+
+
+locale.setlocale(locale.LC_ALL, '')
 
 __url__ = 'https://steemmonsters.com/'
 price_dict = {}
 
 
+#db = sqlite3.connect("/home/ubuntu/bots/monsters/monster.db",
+#                     detect_types=sqlite3.PARSE_DECLTYPES)
+
+# The program is searching within the same folder for the DB
 db = sqlite3.connect("monster.db",
                      detect_types=sqlite3.PARSE_DECLTYPES)
-cursor = db.cursor()
 
+cursor = db.cursor()
+b = Blockchain()
+
+
+
+def calculate_cooldown(played_block):
+    block = b.get_current_block()
+    block_number = block.block_num
+    last_played = block_number - played_block
+    #print(last_played, block_number, played_block)
+    #print("difference in blocks", last_played)
+    return last_played
 
 
 def get_player_pic(player):
@@ -59,6 +80,73 @@ def getcardsstats():
             time.sleep(2)
         cnt2 += 1
     return response.json()
+
+
+def do_add_tournament(name, price, date, link):
+    datarow = (name, price, date, link)
+    cursor.execute("INSERT INTO tournament(name, price, date, link)"
+                   "VALUES(?,?,?,?)", datarow)
+    db.commit()
+
+    return 1
+
+def get_tournament(anzahl):
+    today = datetime.datetime.today()
+    cursor.execute("SELECT * FROM tournament WHERE date > (?) ORDER BY"
+                   " date(\"datum\") ASC LIMIT (?)", (today, anzahl, ))
+    result = cursor.fetchall()
+    if not result:
+        return -1
+    return result
+
+def do_delete_tournament(key):
+    try:
+        cursor.execute("SELECT count(*) from tournament where id = ?", (key, ))
+        result = cursor.fetchone()
+        if result[0] == 1:
+            cursor.execute("DELETE FROM tournament where id = ?", (key, ))
+            db.commit()
+            return 1
+        return 0
+    except sqlite3.Error as err:
+        print(err)
+        return -1
+
+def get_league(rating):
+    league = ""
+    if 0 <= rating <= 99:
+        league = "Novice"
+    elif 100 <= rating <= 399:
+        league = "Bronze III"
+    elif 400 <= rating <= 699:
+        league = "Bronze II"
+    elif 700 <= rating <= 999:
+        league = "Bronze I"
+    elif 1000 <= rating <= 1299:
+        league = "Silver III"
+    elif 1300 <= rating <= 1599:
+        league = "Silver II"
+    elif 1600 <= rating <= 1899:
+        league = "Silver I"
+    elif 1900 <= rating <= 2199:
+        league = "Gold III"
+    elif 2200 <= rating <= 2499:
+        league = "Gold II"
+    elif 2500 <= rating <= 2799:
+        league = "Gold I"
+    elif 2800 <= rating <= 3099:
+        league = "Diamond III"
+    elif 3100 <= rating <= 3399:
+        league = "Diamond II"
+    elif 3400 <= rating <= 3699:
+        league = "Diamond I"
+    elif 3700 <= rating <= 4199:
+        league = "Champion III"
+    elif 4200 <= rating <= 4699:
+        league = "Champion II"
+    elif rating >= 4700:
+        league = "Champion I"
+    return league
 
 
 def get_leaderboard():
@@ -144,11 +232,36 @@ def get_card_price(card):
         min_bcx_gold_promo = "-"
 
 
+    #reward cards
+    cursor.execute("SELECT buy_price FROM market WHERE card_detail_id = ?"
+                   " AND edition = ? AND gold = ? ORDER BY buy_price ASC", (card, 3, 0,))
+    min_price_common_reward = cursor.fetchone()
+    if min_price_common_reward is None:
+        min_price_common_reward = "-"
+    cursor.execute("SELECT bcx_price FROM market WHERE card_detail_id = ?"
+                   " AND edition = ? AND gold = ? AND bcx_price > 0 ORDER BY bcx_price ASC", (card, 3, 0,))
+    min_bcx_common_reward = cursor.fetchone()
+    if min_bcx_common_reward is None:
+        min_bcx_common_reward = "-"
+
+    cursor.execute("SELECT buy_price FROM market WHERE card_detail_id = ?"
+                   " AND edition = ? AND gold = ? ORDER BY buy_price ASC", (card, 3, 1,))
+    min_price_gold_reward = cursor.fetchone()
+    if min_price_gold_reward is None:
+        min_price_gold_reward = "-"
+    cursor.execute("SELECT bcx_price FROM market WHERE card_detail_id = ?"
+                   " AND edition = ? AND gold = ? AND bcx_price > 0 ORDER BY bcx_price ASC", (card, 3, 1,))
+    min_bcx_gold_reward = cursor.fetchone()
+    if min_bcx_gold_reward is None:
+        min_bcx_gold_reward = "-"
+
+
 
     return [min_price_common_alpha[0], min_price_common_beta[0],
             min_price_gold_alpha[0], min_price_gold_beta[0], min_bcx_common_alpha[0],
             min_bcx_common_beta[0], min_bcx_gold_alpha[0], min_bcx_gold_beta[0],
-            min_price_common_promo[0], min_bcx_common_promo[0], min_price_gold_promo[0], min_bcx_gold_promo[0]]
+            min_price_common_promo[0], min_bcx_common_promo[0], min_price_gold_promo[0], min_bcx_gold_promo[0],
+            min_price_common_reward[0], min_bcx_common_reward[0], min_price_gold_reward[0], min_bcx_gold_reward[0]]
 
 
 
@@ -183,16 +296,14 @@ def get_card_id(card_name):
     c_id = cursor.fetchone()
     if c_id is None:
         return -1, 0
-    else:
-        return c_id[0], c_id[1]
+    return c_id[0], c_id[1]
 
 def get_name_by_id(card_detail_id):
     cursor.execute("SELECT name FROM card WHERE id = ?", (card_detail_id,))
     name = cursor.fetchone()
     if name is None:
         return -1
-    else:
-        return name[0]
+    return name[0]
 
 
 def get_rarity(c_id):
@@ -200,8 +311,7 @@ def get_rarity(c_id):
     rarity = cursor.fetchone()
     if rarity is None:
         return -1
-    else:
-        return rarity[0]
+    return rarity[0]
 
 def update_bcx(bcx_price, market_id):
     cursor.execute("UPDATE market SET bcx_price = ? where market_id = ?",
@@ -214,6 +324,7 @@ def get_single_cards(card_detail_id, edition, gold, xp):
     # Alpha Edition Cards per XP
     if edition == 0 and gold == 0 and rarity == 4:
         cards = (xp / 1000) +1
+        #current_level = calculate_level()
     if edition == 0 and gold == 0 and rarity == 3:
         cards = (xp / 250) +1
     if edition == 0 and gold == 0 and rarity == 2:
@@ -262,6 +373,24 @@ def get_single_cards(card_detail_id, edition, gold, xp):
         cards = xp / 500
     if edition == 2 and gold == 1 and rarity == 1:
         cards = xp / 250
+
+    # Reward Edition Cards per XP
+    if edition == 3 and gold == 0 and rarity == 4:
+        cards = (xp / 750) +1
+    if edition == 3 and gold == 0 and rarity == 3:
+        cards = (xp / 175) +1
+    if edition == 3 and gold == 0 and rarity == 2:
+        cards = (xp / 75) +1
+    if edition == 3 and gold == 0 and rarity == 1:
+        cards = (xp / 15) +1
+    if edition == 3 and gold == 1 and rarity == 4:
+        cards = xp / 2000
+    if edition == 3 and gold == 1 and rarity == 3:
+        cards = xp / 800
+    if edition == 3 and gold == 1 and rarity == 2:
+        cards = xp / 400
+    if edition == 3 and gold == 1 and rarity == 1:
+        cards = xp / 200
     return cards
 
 def get_card_worth(card_detail_id, edition, gold, xp):
@@ -303,13 +432,6 @@ def get_card_worth(card_detail_id, edition, gold, xp):
 def get_player_cards(player):
     response = ""
     cnt2 = 0
-    worth = 0
-    alpha = 0
-    beta = 0
-    promo = 0
-    gold_cards = 0
-    valuable_card = {}
-    valuable_card["worth"] = 0
     while str(response) != '<Response [200]>' and cnt2 < 15:
         response = requests.get(__url__ + "cards/collection/" + player)
         if str(response) != '<Response [200]>':
@@ -317,11 +439,75 @@ def get_player_cards(player):
         cnt2 += 1
     if "error" in response.json():
         return -1
+    return response.json()
+
+
+#def calculate_next_level(card_detail_id, edition, gold, cards):
+
+def get_cards_on_cooldown(player):
+
+    data = get_player_cards(player)
+    for r in data["cards"]:
+        cooldown = 0
+#        minutes = 0
+        card_detail_id = r["card_detail_id"]
+#        edition = r["edition"]
+        played_block = r["last_used_block"]
+        if played_block is not None:
+            cooldown = calculate_cooldown(int(played_block))
+#            minutes = cooldown *3 / 60
+            now = datetime.datetime.utcnow()
+            now = now.replace(tzinfo=timezone('UTC'))
+            now = now.astimezone(timezone('Europe/Berlin'))
+            #print("now",now.strftime('%Y-%m-%d %H:%M:%S'))
+            played_time = now.timestamp() - (cooldown*3)
+            latestactivity = datetime.datetime.utcfromtimestamp(played_time)
+            latestactivity = latestactivity.replace(tzinfo=timezone('UTC'))
+            #value =datetime.datetime.strftime(played_time,"%d.%m.%Y %H:%M")
+            latestactivity_cet = latestactivity.astimezone(timezone('Europe/Berlin'))
+            cd_ends = latestactivity_cet + datetime.timedelta(days=7)
+
+            print("Karte %s zuletzt gespielt:%s" % (card_detail_id, latestactivity_cet.strftime('%Y-%m-%d %H:%M:%S')))
+            print("CD endet:%s " % cd_ends.strftime('%Y-%m-%d %H:%M:%S'))
+            #print(card_detail_id,minutes, value)
+
+
+            #print(card_detail_id,minutes)
+
+
+
+def get_level_up(player):
+    data = get_player_cards(player)
+    for r in data["cards"]:
+        xp = r["xp"]
+        if xp == 0:
+            print("nothing to do")
+        elif xp > 0:
+            card_detail_id = r["card_detail_id"]
+            edition = r["edition"]
+            gold = r["gold"]
+            xp = r["xp"]
+            print(card_detail_id)
+            cards = get_single_cards(card_detail_id, edition, gold, xp)
+            print("no cards", cards)
+    return 0
+
+
+
+def get_player_worth(player):
+    worth = 0
+    alpha = 0
+    beta = 0
+    promo = 0
+    reward = 0
+    gold_cards = 0
+    valuable_card = {}
+    valuable_card["worth"] = 0
     #return response.json()
     # get the profile image from steemit
     pic_url = get_player_pic(player)
 
-    data = response.json()
+    data = get_player_cards(player)
     for r in data["cards"]:
         card_detail_id = r["card_detail_id"]
         edition = r["edition"]
@@ -332,6 +518,8 @@ def get_player_cards(player):
             beta += 1
         elif edition == 2:
             promo += 1
+        elif edition == 3:
+            reward += 1
         gold = r["gold"]
         if gold == 1:
             gold_cards += 1
@@ -355,7 +543,7 @@ def get_player_cards(player):
         worth += card_worth
     valuable_card["name"] = get_name_by_id(valuable_card["id"])
     worth = round(worth, 2)
-    return [worth, alpha, beta, promo, gold_cards, pic_url, valuable_card["name"], valuable_card["worth"]]
+    return [worth, alpha, beta, promo, reward, gold_cards, pic_url, valuable_card["name"], valuable_card["worth"]]
 
 def calculate_bcx():
     cursor.execute("SELECT market_id, card_detail_id, buy_price, xp, edition, gold from market WHERE xp > 0")
@@ -378,11 +566,14 @@ def calculate_bcx():
 
     db.commit()
 
+async def kill_price_dict():
+    price_dict.clear()
+
 def get_market_data():
     #clear database for the new snapshot
-    cursor.execute("DELETE FROM market")
-    db.commit()
-    price_dict.clear()
+    #cursor.execute("DELETE FROM market")
+    #db.commit()
+    #price_dict.clear()
 
     response = ""
     cnt2 = 0
@@ -392,6 +583,9 @@ def get_market_data():
         if str(response) != '<Response [200]>':
             time.sleep(1)
         cnt2 += 1
+
+    cursor.execute("DELETE FROM market")
+    db.commit()
 
     for r in response.json():
         market_id = r["market_id"]
@@ -410,4 +604,5 @@ def get_market_data():
         cursor.execute("INSERT INTO market(market_id, card_detail_id, edition, gold, uid, buy_price, seller, xp)"
                        "VALUES(?,?,?,?,?,?,?,?)", datarow)
     db.commit()
+    print("commit ausgführt")
     calculate_bcx()
