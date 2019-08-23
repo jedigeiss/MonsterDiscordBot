@@ -22,6 +22,8 @@ with the new market values.
 - All informations about quests at your disposal
 - Monetary evaluation of all cards of one player
 - Display current Leaderboard
+- Displays lease information in total value calculation
+- Displays more detail and top 3 of incoming and outgoing leases
 
 ## Things to come:
 - Display Battle History of one player 
