@@ -270,15 +270,18 @@ def get_card_details():
         color = r["color"]
         typ = r["type"]
         rarity = r["rarity"]
+        pic_adress = name.title()
+        pic_adress = pic_adress.replace(" ", "%20")
+        pic_adress = "https://s3.amazonaws.com/steemmonsters/cards_untamed/" + pic_adress +".png"
         if c_id in all_ids:
             print("already there doing nothing")
         else:
 
-            datarow = (c_id, name, color, typ, rarity)
+            datarow = (c_id, name, color, typ, rarity, pic_adress)
             count += 1
-
-            cursor.execute("INSERT INTO card(id, name, color, type, rarity)"
-                           "VALUES(?,?,?,?,?)", datarow)
+            print(datarow)
+            cursor.execute("INSERT INTO card(id, name, color, type, rarity, url)"
+                           "VALUES(?,?,?,?,?,?)", datarow)
             db.commit()
     print("added %s cards" % count)
 
@@ -380,6 +383,10 @@ def get_single_cards(card_detail_id, edition, gold, xp):
         cards = xp / 400
     if edition == 3 and gold == 1 and rarity == 1:
         cards = xp / 200
+        
+    # Untamed Edition Cards per XP    
+    if edition == 4:
+        cards = xp
     return cards
 
 def get_card_worth(card_detail_id, edition, gold, xp):
@@ -524,9 +531,15 @@ def get_player_worth(player):
     delegation_out_counter = 0
     worth = 0
     alpha = 0
+    alpha_value = 0
     beta = 0
+    beta_value = 0
     promo = 0
+    promo_value = 0
     reward = 0
+    reward_value = 0
+    untamed = 0
+    untamed_value = 0
     gold_cards = 0
     valuable_card = {}
     valuable_card["worth"] = 0
@@ -543,20 +556,13 @@ def get_player_worth(player):
         if r["player"] != player:
             delegation_in_counter +=1
             delegated_in = True
-            print(player, card_detail_id)
+            #print(player, card_detail_id)
         else:
             if r["delegated_to"] is not None:
                 delegation_out_counter +=1
                 delegated_out = True
         # setting a few variables to do some statistics about the cards
-        if edition == 0:
-            alpha += 1
-        elif edition == 1:
-            beta += 1
-        elif edition == 2:
-            promo += 1
-        elif edition == 3:
-            reward += 1
+        
         gold = r["gold"]
         if gold == 1:
             gold_cards += 1
@@ -567,6 +573,23 @@ def get_player_worth(player):
 
         card_worth = get_card_worth(card_detail_id, edition, gold, xp)
         # saving the most valuable card in a dict to access later on
+        
+        if edition == 0:
+            alpha += 1
+            alpha_value += card_worth
+        elif edition == 1:
+            beta += 1
+            beta_value += card_worth
+        elif edition == 2:
+            promo += 1
+            promo_value += card_worth
+        elif edition == 3:
+            reward += 1
+            reward_value += card_worth
+        elif edition == 4:
+            untamed_value += card_worth
+            untamed +=1
+            
         if delegated_in is False and card_worth > valuable_card["worth"]:
             valuable_card["worth"] = card_worth
             valuable_card["id"] = card_detail_id
@@ -586,7 +609,14 @@ def get_player_worth(player):
     worth = round(worth, 2)
     delegation_in_worth = round(delegation_in_worth, 2)
     delegation_out_worth = round(delegation_out_worth, 2)
-    return [worth, alpha, beta, promo, reward, gold_cards, pic_url, valuable_card["name"], valuable_card["worth"], delegation_in_worth, delegation_out_worth]
+    #print(untamed, untamed_value)
+    #print(alpha, alpha_value)
+    #print(beta, beta_value)
+    #print(reward, reward_value)
+    #print(promo, promo_value)
+    
+    return [worth, alpha, beta, promo, reward, gold_cards, pic_url, valuable_card["name"], valuable_card["worth"], delegation_in_worth
+            , delegation_out_worth, alpha_value, beta_value, promo_value, reward_value, untamed_value, untamed]
 
 async def kill_price_dict():
     price_dict.clear()
