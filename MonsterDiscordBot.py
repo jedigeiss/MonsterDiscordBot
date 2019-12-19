@@ -4,7 +4,7 @@
 Created on Tue Oct 30 16:49:19 2018
 
 @author: jan
-This is version 0.2 of the MonsterBot
+This is version 0.4 of the MonsterBot
 
 
 """
@@ -35,10 +35,10 @@ from monsters import get_league
 BOT_PREFIX = "!"
 
 # live bot token
-TOKEN = "Insert your token here"
+TOKEN = "Your Live Bot Token"
 
 #Testbot Token
-#TOKEN = ""
+#TOKEN = "Your Test Bot Token"
 
 
 locale.setlocale(locale.LC_ALL, '')
@@ -128,7 +128,7 @@ async def monster(ctx, player):
 @client.command(description="Top 10 Ansicht aktuelle Rangfolge",
                 brief="Top 10 Spieler",
                 aliases=["Leaderboard", "Tabelle", "tabelle"])
-async def leaderboard(ctx):
+async def leaderboard(ctx, guild=""):
     '''Gets and displays the current leaderboard in Discord
     '''
     data = get_leaderboard()
@@ -136,12 +136,17 @@ async def leaderboard(ctx):
         await ctx.send("Leaderboard konnte nicht geladen werden")
     else:
         ranking = []
-
+        
         for r in data:
-            ranking.append(r["player"])
-            ranking.append(r["rating"])
-            ranking.append(r["rank"])
-
+            if guild == "":
+                ranking.append(r["player"])
+                ranking.append(r["rating"])
+                ranking.append(r["rank"])
+            elif r["guild_name"] == guild:
+                ranking.append(r["player"])
+                ranking.append(r["rating"])
+                ranking.append(r["rank"])
+                
         embed = discord.Embed(title="Leaderboard :", description="Steemmonsters Top 10"
                               , color=0x00ff00)
         embed.add_field(name="Spieler", value="%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s"
@@ -190,6 +195,7 @@ async def wert(ctx, *args):
 
 
         picurl = url
+        #print(picurl)
         #creating the embed to send to discord with all informations
         embed = discord.Embed(title="Kartenwert Übersicht :", description=card_name, color=0x00ff00)
         embed.add_field(name="Alpha Common", value="%s $/ %s $" %
@@ -294,15 +300,22 @@ async def gesamtwert(ctx, player):
         valuable_card_worth = round(data[8], 3)
         delegation_in_worth = data[9]
         delegation_out_worth = data[10]
+        alpha_value = data[11]
+        beta_value = data[12]
+        promo_value = data[13]
+        reward_value = data[14]
+        untamed_value = data[15]
+        untamed_cards = data[16]
 
         embed = discord.Embed(title="Spieler Übersicht :", description=name, color=0x00ff00)
         embed.add_field(name="Gesamtwert", value="%s $" % worth)
         embed.add_field(name="Eingehende Leases", value="%s $" % delegation_in_worth )
         embed.add_field(name="Ausgehende Leases", value="%s $" % delegation_out_worth)
-        embed.add_field(name="Alpha Karten", value="%s" % alpha_cards)
-        embed.add_field(name="Beta Karten", value="%s" % beta_cards)
-        embed.add_field(name="Promo Karten", value="%s" % promo_cards)
-        embed.add_field(name="Reward Karten", value="%s" % reward_cards)
+        embed.add_field(name="Alpha Kartenwert", value="%s $ - (%s)" % (round(alpha_value, 3),alpha_cards))
+        embed.add_field(name="Beta Kartenwert", value="%s $ - (%s)" % (round(beta_value, 3), beta_cards))
+        embed.add_field(name="Promo Kartenwert", value="%s $ - (%s)" % (round(promo_value, 3), promo_cards))
+        embed.add_field(name="Reward Kartenwert", value="%s $ - (%s)" % (round(reward_value, 3), reward_cards))
+        embed.add_field(name="Untamed Kartenwert", value="%s $ - (%s)" % (round(untamed_value, 3),untamed_cards)) 
         embed.add_field(name="Goldene Karten", value="%s" % gold_cards)
         embed.add_field(name="Wertvollste Karte", value="%s, %s $" % (valuable_card_name.title(), valuable_card_worth))
         embed.set_thumbnail(url=pic_url)
@@ -349,9 +362,12 @@ async def delegation(ctx, player):
         embed.add_field(name="Von", value="**%s**\n%s\n%s" % (inlist[0]["from"],inlist[1]["from"],inlist[2]["from"]), inline=True)
         embed.add_field(name="Wert", value="**%s**\n%s\n%s" % (inlist[0]["worth"],inlist[1]["worth"],inlist[2]["worth"]),inline=True)
         embed.add_field(name="Gesamtwert Eingehend", value="%s $" % data[3], inline=False)
+         
         embed.timestamp = datetime.datetime.utcnow()
         embed.set_footer(text="fresh from the MonsterBot and Steemmonsters")
         await ctx.send(embed=embed)
+
+
 
 
 @client.command(description="Anlegen eines Steem Monster Turniers",
@@ -393,6 +409,7 @@ async def del_tournament(key):
                 aliases=["turniere", "Turniere"])
 async def show_tournament(anzahl=4):
     result = get_tournament(anzahl)
+    #today = datetime.datetime.today()
     if result == -1:
         await client.say("Keine zukünftigen"
                          " Turniere in der Datenbank gefunden")
@@ -410,16 +427,18 @@ async def show_tournament(anzahl=4):
 
 
 
+
 @client.command(description="MonsterBot Version",
                 brief="Version des MonsterBots",
                 aliases=["Version", "ver", "Ver"])
 async def version(ctx):
     '''puts the current version of the MonsterBot
     '''
-    await ctx.send("MonsterBot Version 0.3, brought to you by jedigeiss"
+    await ctx.send("MonsterBot Version 0.4, brought to you by jedigeiss"
                      "\nThanks to: Holger80 and Rivalzzz")
 
 
+#client.loop.create_task(update_market())
 update_market.start()
 
 client.run(TOKEN)
